@@ -29243,7 +29243,7 @@ function requireClient () {
 var clientExports = requireClient();
 
 const CONFIG = {
-  dark: true,
+  dark: false,
   prefix: "",
   version: 4
 };
