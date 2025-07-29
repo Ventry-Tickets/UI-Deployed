@@ -29959,6 +29959,9 @@ function useResolvedPath(to, { relative } = {}) {
     [to, routePathnamesJson, locationPathname, relative]
   );
 }
+function useRoutes(routes, locationArg) {
+  return useRoutesImpl(routes, locationArg);
+}
 function useRoutesImpl(routes, locationArg, dataRouterState, future) {
   invariant(
     useInRouterContext(),
@@ -29985,7 +29988,14 @@ Please change the parent <Route path="${parentPath}"> to <Route path="${parentPa
   }
   let locationFromContext = useLocation();
   let location;
-  {
+  if (locationArg) {
+    let parsedLocationArg = typeof locationArg === "string" ? parsePath(locationArg) : locationArg;
+    invariant(
+      parentPathnameBase === "/" || parsedLocationArg.pathname?.startsWith(parentPathnameBase),
+      `When overriding the location using \`<Routes location>\` or \`useRoutes(routes, location)\`, the location pathname must begin with the portion of the URL pathname that was matched by all parent routes. The current pathname base is "${parentPathnameBase}" but pathname "${parsedLocationArg.pathname}" was given in the \`location\` prop.`
+    );
+    location = parsedLocationArg;
+  } else {
     location = locationFromContext;
   }
   let pathname = location.pathname || "/";
@@ -30026,6 +30036,26 @@ Please change the parent <Route path="${parentPath}"> to <Route path="${parentPa
     dataRouterState,
     future
   );
+  if (locationArg && renderedMatches) {
+    return /* @__PURE__ */ reactExports.createElement(
+      LocationContext.Provider,
+      {
+        value: {
+          location: {
+            pathname: "/",
+            search: "",
+            hash: "",
+            state: null,
+            key: "default",
+            ...location
+          },
+          navigationType: "POP"
+          /* Pop */
+        }
+      },
+      renderedMatches
+    );
+  }
   return renderedMatches;
 }
 function DefaultErrorComponent() {
@@ -30305,6 +30335,44 @@ function DataRoutes({
 }) {
   return useRoutesImpl(routes, void 0, state, future);
 }
+function Navigate({
+  to,
+  replace: replace2,
+  state,
+  relative
+}) {
+  invariant(
+    useInRouterContext(),
+    // TODO: This error is probably because they somehow have 2 versions of
+    // the router loaded. We can help them understand how to avoid that.
+    `<Navigate> may be used only in the context of a <Router> component.`
+  );
+  let { static: isStatic } = reactExports.useContext(NavigationContext);
+  warning(
+    !isStatic,
+    `<Navigate> must not be used on the initial render in a <StaticRouter>. This is a no-op, but you should modify your code so the <Navigate> is only ever rendered in response to some user interaction or state change.`
+  );
+  let { matches } = reactExports.useContext(RouteContext);
+  let { pathname: locationPathname } = useLocation();
+  let navigate = useNavigate();
+  let path = resolveTo(
+    to,
+    getResolveToMatches(matches),
+    locationPathname,
+    relative === "path"
+  );
+  let jsonPath = JSON.stringify(path);
+  reactExports.useEffect(() => {
+    navigate(JSON.parse(jsonPath), { replace: replace2, state, relative });
+  }, [navigate, jsonPath, relative, replace2, state]);
+  return null;
+}
+function Route(props) {
+  invariant(
+    false,
+    `A <Route> is only ever to be used as the child of <Routes> element, never rendered directly. Please wrap your <Route> in a <Routes>.`
+  );
+}
 function Router({
   basename: basenameProp = "/",
   children = null,
@@ -30361,6 +30429,62 @@ function Router({
     return null;
   }
   return /* @__PURE__ */ reactExports.createElement(NavigationContext.Provider, { value: navigationContext }, /* @__PURE__ */ reactExports.createElement(LocationContext.Provider, { children, value: locationContext }));
+}
+function Routes({
+  children,
+  location
+}) {
+  return useRoutes(createRoutesFromChildren(children), location);
+}
+function createRoutesFromChildren(children, parentPath = []) {
+  let routes = [];
+  reactExports.Children.forEach(children, (element, index) => {
+    if (!reactExports.isValidElement(element)) {
+      return;
+    }
+    let treePath = [...parentPath, index];
+    if (element.type === reactExports.Fragment) {
+      routes.push.apply(
+        routes,
+        createRoutesFromChildren(element.props.children, treePath)
+      );
+      return;
+    }
+    invariant(
+      element.type === Route,
+      `[${typeof element.type === "string" ? element.type : element.type.name}] is not a <Route> component. All component children of <Routes> must be a <Route> or <React.Fragment>`
+    );
+    invariant(
+      !element.props.index || !element.props.children,
+      "An index route cannot have child routes."
+    );
+    let route = {
+      id: element.props.id || treePath.join("-"),
+      caseSensitive: element.props.caseSensitive,
+      element: element.props.element,
+      Component: element.props.Component,
+      index: element.props.index,
+      path: element.props.path,
+      loader: element.props.loader,
+      action: element.props.action,
+      hydrateFallbackElement: element.props.hydrateFallbackElement,
+      HydrateFallback: element.props.HydrateFallback,
+      errorElement: element.props.errorElement,
+      ErrorBoundary: element.props.ErrorBoundary,
+      hasErrorBoundary: element.props.hasErrorBoundary === true || element.props.ErrorBoundary != null || element.props.errorElement != null,
+      shouldRevalidate: element.props.shouldRevalidate,
+      handle: element.props.handle,
+      lazy: element.props.lazy
+    };
+    if (element.props.children) {
+      route.children = createRoutesFromChildren(
+        element.props.children,
+        treePath
+      );
+    }
+    routes.push(route);
+  });
+  return routes;
 }
 var defaultMethod = "get";
 var defaultEncType = "application/x-www-form-urlencoded";
@@ -31273,44 +31397,92 @@ function IconBase(props) {
 }
 
 // THIS FILE IS AUTO GENERATED
-function HiBell (props) {
+function HiArrowDown (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M16.707 10.293a1 1 0 010 1.414l-6 6a1 1 0 01-1.414 0l-6-6a1 1 0 111.414-1.414L9 14.586V3a1 1 0 012 0v11.586l4.293-4.293a1 1 0 011.414 0z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiArrowUp (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3.293 9.707a1 1 0 010-1.414l6-6a1 1 0 011.414 0l6 6a1 1 0 01-1.414 1.414L11 5.414V17a1 1 0 11-2 0V5.414L4.707 9.707a1 1 0 01-1.414 0z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiBell (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"},"child":[]}]})(props);
+}function HiCalendar (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiCash (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiChartBar (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"},"child":[]}]})(props);
 }function HiChevronDown (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z","clipRule":"evenodd"},"child":[]}]})(props);
-}function HiCode (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiChevronRight (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiClipboardList (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"},"child":[]},{"tag":"path","attr":{"fillRule":"evenodd","d":"M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiCog (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z","clipRule":"evenodd"},"child":[]}]})(props);
-}function HiColorSwatch (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M4 2a2 2 0 00-2 2v11a3 3 0 106 0V4a2 2 0 00-2-2H4zm1 14a1 1 0 100-2 1 1 0 000 2zm5-1.757l4.9-4.9a2 2 0 000-2.828L13.485 5.1a2 2 0 00-2.828 0L10 5.757v8.486zM16 18H9.071l6-6H16a2 2 0 012 2v2a2 2 0 01-2 2z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiDocumentReport (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm2 10a1 1 0 10-2 0v3a1 1 0 102 0v-3zm2-3a1 1 0 011 1v5a1 1 0 11-2 0v-5a1 1 0 011-1zm4-1a1 1 0 10-2 0v7a1 1 0 102 0V8z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiDownload (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z","clipRule":"evenodd"},"child":[]}]})(props);
-}function HiHeart (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiDuplicate (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z"},"child":[]},{"tag":"path","attr":{"d":"M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z"},"child":[]}]})(props);
+}function HiEye (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M10 12a2 2 0 100-4 2 2 0 000 4z"},"child":[]},{"tag":"path","attr":{"fillRule":"evenodd","d":"M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiFilter (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiGift (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M5 5a3 3 0 015-2.236A3 3 0 0114.83 6H16a2 2 0 110 4h-5V9a1 1 0 10-2 0v1H4a2 2 0 110-4h1.17C5.06 5.687 5 5.35 5 5zm4 1V5a1 1 0 10-1 1h1zm3 0a1 1 0 10-1-1v1h1z","clipRule":"evenodd"},"child":[]},{"tag":"path","attr":{"d":"M9 11H3v5a2 2 0 002 2h4v-7zM11 18h4a2 2 0 002-2v-5h-6v7z"},"child":[]}]})(props);
 }function HiHome (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"},"child":[]}]})(props);
-}function HiLightningBolt (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiInbox (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M5 3a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V5a2 2 0 00-2-2H5zm0 2h10v7h-2l-1 2H8l-1-2H5V5z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiLocationMarker (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiLogout (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiMail (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z"},"child":[]},{"tag":"path","attr":{"d":"M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z"},"child":[]}]})(props);
+}function HiMap (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M12 1.586l-4 4v12.828l4-4V1.586zM3.707 3.293A1 1 0 002 4v10a1 1 0 00.293.707L6 18.414V5.586L3.707 3.293zM17.707 5.293L14 1.586v12.828l2.293 2.293A1 1 0 0018 16V6a1 1 0 00-.293-.707z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiMenu (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiMinus (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiOfficeBuilding (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M4 4a2 2 0 012-2h8a2 2 0 012 2v12a1 1 0 110 2h-3a1 1 0 01-1-1v-2a1 1 0 00-1-1H9a1 1 0 00-1 1v2a1 1 0 01-1 1H4a1 1 0 110-2V4zm3 1h2v2H7V5zm2 4H7v2h2V9zm2-4h2v2h-2V5zm2 4h-2v2h2V9z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiPencil (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"},"child":[]}]})(props);
+}function HiPhotograph (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiPlus (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z","clipRule":"evenodd"},"child":[]}]})(props);
-}function HiShare (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"},"child":[]}]})(props);
-}function HiStar (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"},"child":[]}]})(props);
-}function HiTemplate (props) {
-  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"},"child":[]}]})(props);
+}function HiQuestionMarkCircle (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiSave (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"},"child":[]}]})(props);
+}function HiShieldCheck (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiSpeakerphone (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M18 3a1 1 0 00-1.447-.894L8.763 6H5a3 3 0 000 6h.28l1.771 5.316A1 1 0 008 18h1a1 1 0 001-1v-4.382l6.553 3.276A1 1 0 0018 15V3z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiTicket (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M2 6a2 2 0 012-2h12a2 2 0 012 2v2a2 2 0 100 4v2a2 2 0 01-2 2H4a2 2 0 01-2-2v-2a2 2 0 100-4V6z"},"child":[]}]})(props);
+}function HiTrash (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiTrendingDown (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M12 13a1 1 0 100 2h5a1 1 0 001-1V9a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586 3.707 5.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiTrendingUp (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiUpload (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiUserCircle (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiUserGroup (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"},"child":[]}]})(props);
 }function HiUser (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z","clipRule":"evenodd"},"child":[]}]})(props);
+}function HiUsers (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"},"child":[]}]})(props);
+}function HiVideoCamera (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"d":"M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z"},"child":[]}]})(props);
+}function HiWifi (props) {
+  return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M17.778 8.222c-4.296-4.296-11.26-4.296-15.556 0A1 1 0 01.808 6.808c5.076-5.077 13.308-5.077 18.384 0a1 1 0 01-1.414 1.414zM14.95 11.05a7 7 0 00-9.9 0 1 1 0 01-1.414-1.414 9 9 0 0112.728 0 1 1 0 01-1.414 1.414zM12.12 13.88a3 3 0 00-4.242 0 1 1 0 01-1.415-1.415 5 5 0 017.072 0 1 1 0 01-1.415 1.415zM9 16a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z","clipRule":"evenodd"},"child":[]}]})(props);
 }function HiX (props) {
   return GenIcon({"attr":{"viewBox":"0 0 20 20","fill":"currentColor","aria-hidden":"true"},"child":[{"tag":"path","attr":{"fillRule":"evenodd","d":"M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z","clipRule":"evenodd"},"child":[]}]})(props);
 }
@@ -31400,13 +31572,202 @@ function Navbar() {
 }
 
 const navItems = [
-  { label: "Home", icon: HiHome, to: "/" },
-  { label: "Analytics", icon: HiChartBar, to: "/analytics" },
+  { label: "Dashboard", icon: HiHome, to: "/dashboard" },
+  {
+    label: "Events",
+    icon: HiCalendar,
+    children: [
+      { label: "All Events", icon: HiCalendar, to: "/events" },
+      { label: "Create New Event", icon: HiTicket, to: "/events/create" },
+      {
+        label: "Drafts & Pending",
+        icon: HiClipboardList,
+        to: "/events/drafts"
+      },
+      { label: "Past Events", icon: HiChartBar, to: "/events/archive" }
+    ]
+  },
+  {
+    label: "Venue Management",
+    icon: HiLocationMarker,
+    children: [
+      { label: "All Venues", icon: HiLocationMarker, to: "/venues" },
+      { label: "Add New Venue", icon: HiLocationMarker, to: "/venues/create" },
+      { label: "Seating Maps", icon: HiLocationMarker, to: "/venues/maps" }
+    ]
+  },
+  {
+    label: "Operations",
+    icon: HiClipboardList,
+    children: [
+      { label: "Check-in & Entry", icon: HiTicket, to: "/operations/checkin" },
+      {
+        label: "Entry Management",
+        icon: HiShieldCheck,
+        to: "/operations/entry"
+      },
+      { label: "Team Management", icon: HiUserGroup, to: "/operations/team" },
+      {
+        label: "Staff Scheduling",
+        icon: HiCalendar,
+        to: "/operations/scheduling"
+      },
+      {
+        label: "Incident Reports",
+        icon: HiDocumentReport,
+        to: "/operations/incidents"
+      }
+    ]
+  },
+  {
+    label: "Audience",
+    icon: HiUsers,
+    children: [
+      { label: "Attendee Database", icon: HiUsers, to: "/audience/attendees" },
+      { label: "Segmentation", icon: HiUsers, to: "/audience/segments" },
+      { label: "Purchase History", icon: HiCash, to: "/audience/purchases" },
+      {
+        label: "Contact Export",
+        icon: HiDocumentReport,
+        to: "/audience/export"
+      }
+    ]
+  },
+  {
+    label: "Analytics",
+    icon: HiChartBar,
+    children: [
+      { label: "Overview", icon: HiChartBar, to: "/analytics" },
+      { label: "Revenue & Financials", icon: HiCash, to: "/analytics/revenue" },
+      { label: "Ticket Sales", icon: HiTicket, to: "/analytics/sales" },
+      { label: "Audience Insights", icon: HiUsers, to: "/analytics/audience" },
+      {
+        label: "Visual Reports",
+        icon: HiDocumentReport,
+        to: "/analytics/reports"
+      }
+    ]
+  },
+  {
+    label: "Financials",
+    icon: HiCash,
+    children: [
+      { label: "Payout Dashboard", icon: HiCash, to: "/financials/payouts" },
+      {
+        label: "Transaction History",
+        icon: HiDocumentReport,
+        to: "/financials/transactions"
+      },
+      { label: "Refund Requests", icon: HiCash, to: "/financials/refunds" },
+      {
+        label: "Invoices & Receipts",
+        icon: HiDocumentReport,
+        to: "/financials/invoices"
+      },
+      { label: "Tax & Legal Info", icon: HiShieldCheck, to: "/financials/tax" }
+    ]
+  },
+  {
+    label: "Marketing",
+    icon: HiSpeakerphone,
+    children: [
+      { label: "Promo Codes", icon: HiTicket, to: "/marketing/promos" },
+      {
+        label: "Email Campaigns",
+        icon: HiSpeakerphone,
+        to: "/marketing/email"
+      },
+      {
+        label: "Social Sharing",
+        icon: HiSpeakerphone,
+        to: "/marketing/social"
+      }
+    ]
+  },
+  { label: "Inbox", icon: HiInbox, to: "/inbox" },
+  {
+    label: "Help & Support",
+    icon: HiQuestionMarkCircle,
+    children: [
+      {
+        label: "Knowledge Base",
+        icon: HiQuestionMarkCircle,
+        to: "/support/kb"
+      },
+      {
+        label: "Submit Ticket",
+        icon: HiQuestionMarkCircle,
+        to: "/support/ticket"
+      },
+      { label: "Live Chat", icon: HiQuestionMarkCircle, to: "/support/chat" },
+      { label: "System Status", icon: HiShieldCheck, to: "/support/status" }
+    ]
+  },
   { label: "Settings", icon: HiCog, to: "/settings" }
 ];
-function Sidebar() {
+function OrganizerSidebar() {
   const location = useLocation();
   const [collapsed, setCollapsed] = reactExports.useState(false);
+  const [expandedItems, setExpandedItems] = reactExports.useState(["Dashboard"]);
+  const toggleExpanded = (label) => {
+    setExpandedItems(
+      (prev) => prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label]
+    );
+  };
+  const isActive = (to) => {
+    if (!to) return false;
+    return location.pathname === to || location.pathname.startsWith(to + "/");
+  };
+  const isParentActive = (children) => {
+    if (!children) return false;
+    return children.some((child) => isActive(child.to));
+  };
+  const renderNavItem = (item, depth = 0) => {
+    const hasChildren = item.children && item.children.length > 0;
+    const isExpanded = expandedItems.includes(item.label);
+    const isItemActive = isActive(item.to);
+    const isChildActive = isParentActive(item.children);
+    if (hasChildren) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            onClick: () => toggleExpanded(item.label),
+            className: `flex items-center w-full px-4 py-2.5 text-left rounded-ventry transition-colors group ${isChildActive ? "bg-ventry-blue text-white" : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"} ${collapsed ? "justify-center" : ""}`,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                item.icon,
+                {
+                  className: `h-5 w-5 ${collapsed ? "" : "mr-3"} ${isChildActive ? "text-white" : "text-gray-500 dark:text-gray-400"}`
+                }
+              ),
+              !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex-1 font-medium", children: item.label }),
+                isExpanded ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiChevronDown, { className: "h-4 w-4" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiChevronRight, { className: "h-4 w-4" })
+              ] })
+            ]
+          }
+        ),
+        !collapsed && isExpanded && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "ml-4 mt-1 space-y-1 border-l-2 border-gray-200 dark:border-gray-700 pl-4", children: item.children?.map((child) => renderNavItem(child, depth + 1)) })
+      ] }, item.label);
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      Link,
+      {
+        to: item.to || "#",
+        className: `flex items-center px-4 py-2.5 rounded-ventry transition-colors group ${isItemActive ? "bg-ventry-blue text-white shadow-ventry" : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"} ${collapsed ? "justify-center" : ""} ${depth > 0 ? "text-sm" : ""}`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            item.icon,
+            {
+              className: `h-5 w-5 ${collapsed ? "" : "mr-3"} ${isItemActive ? "text-white" : "text-gray-500 dark:text-gray-400"}`
+            }
+          ),
+          !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: item.label })
+        ]
+      }
+    ) }, item.label);
+  };
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "aside",
     {
@@ -31414,38 +31775,31 @@ function Sidebar() {
       "aria-label": "Sidebar",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between px-4 py-4 border-b-2 border-gray-200 dark:border-gray-700", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(Link, { to: "/", className: "flex items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/ventry-logo.svg", alt: "Ventry Logo", className: "h-8 w-8" }),
-            !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold text-lg text-ventry-blue dark:text-ventry-blue-light", children: "Ventry" })
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(Link, { to: "/dashboard", className: "flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("img", { src: "/ventry-logo.svg", alt: "Ventry", className: "h-8 w-8" }),
+            !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xl font-bold text-gradient-ventry", children: "Ventry" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
+              onClick: () => setCollapsed(!collapsed),
+              className: "p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors",
               "aria-label": collapsed ? "Expand sidebar" : "Collapse sidebar",
-              onClick: () => setCollapsed((c) => !c),
-              className: "ml-2 p-2 rounded-ventry-sm hover:bg-ventry-blue hover:text-white dark:hover:bg-ventry-blue-dark focus:outline-none focus:ring-2 focus:ring-ventry-blue transition-all duration-200",
               children: collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMenu, { className: "h-5 w-5" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiX, { className: "h-5 w-5" })
             }
           )
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "flex flex-col gap-2 mt-4 px-3", children: navItems.map(({ label, icon: Icon, to }) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          Link,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "flex-1 px-3 py-4 overflow-y-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-2", children: navItems.map((item) => renderNavItem(item)) }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border-t-2 border-gray-200 dark:border-gray-700 p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
           {
-            to,
-            className: `flex items-center gap-3 px-4 py-3 rounded-ventry text-gray-700 dark:text-gray-200 hover:bg-ventry-blue hover:text-white dark:hover:bg-ventry-blue-dark focus:outline-none focus:ring-2 focus:ring-ventry-blue transition-all duration-200 transform hover:-translate-y-0.5 ${location.pathname === to ? "bg-ventry-blue text-white dark:bg-ventry-blue font-semibold shadow-ventry" : ""}`,
-            "aria-current": location.pathname === to ? "page" : void 0,
+            className: `flex items-center w-full px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 rounded-ventry transition-colors ${collapsed ? "justify-center" : ""}`,
             children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-5 w-5 flex-shrink-0", "aria-hidden": "true" }),
-              !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: label })
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiLogout, { className: `h-5 w-5 ${collapsed ? "" : "mr-3"}` }),
+              !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "Logout" })
             ]
-          },
-          label
-        )) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-4 border-t-2 border-gray-200 dark:border-gray-700", children: !collapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-gray-500 dark:text-gray-400 font-medium", children: "Powered by" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-bold text-gradient-ventry-lime", children: "Ventry" })
-        ] }) })
+          }
+        ) })
       ]
     }
   );
@@ -31548,96 +31902,6 @@ function VentryButton({
       disabled: disabled || loading,
       onClick,
       type,
-      children: renderContent()
-    }
-  );
-}
-
-function VentryIconButton({
-  children,
-  variant = "primary",
-  size = "md",
-  loading = false,
-  disabled = false,
-  onClick,
-  type = "button",
-  className = "",
-  tooltip,
-  rounded = true
-}) {
-  const getClasses = () => {
-    const baseClasses = `font-semibold transition-all duration-200 transform hover:-translate-y-0.5 focus:outline-none focus:ring-4 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none inline-flex items-center justify-center ${rounded ? "rounded-full" : "rounded-ventry"}`;
-    switch (variant) {
-      case "primary":
-        return `${baseClasses} bg-ventry-blue text-white border-2 border-ventry-blue hover:bg-ventry-blue-dark hover:border-ventry-blue-dark focus:ring-blue-300 shadow-ventry hover:shadow-ventry-hover`;
-      case "secondary":
-        return `${baseClasses} bg-ventry-lime text-gray-900 border-2 border-ventry-lime hover:bg-ventry-lime-dark hover:border-ventry-lime-dark focus:ring-yellow-300 shadow-ventry hover:shadow-ventry-hover`;
-      case "outline":
-        return `${baseClasses} bg-transparent text-ventry-blue border-2 border-ventry-blue hover:bg-ventry-blue hover:text-white focus:ring-blue-300`;
-      case "ghost":
-        return `${baseClasses} bg-transparent text-ventry-blue border-2 border-transparent hover:bg-ventry-blue/10 hover:border-ventry-blue/20 focus:ring-blue-300`;
-      case "destructive":
-        return `${baseClasses} bg-red-500 text-white border-2 border-red-500 hover:bg-red-600 hover:border-red-600 focus:ring-red-300 shadow-ventry hover:shadow-red-500/20`;
-      case "success":
-        return `${baseClasses} bg-green-500 text-white border-2 border-green-500 hover:bg-green-600 hover:border-green-600 focus:ring-green-300 shadow-ventry hover:shadow-green-500/20`;
-      case "warning":
-        return `${baseClasses} bg-yellow-500 text-white border-2 border-yellow-500 hover:bg-yellow-600 hover:border-yellow-600 focus:ring-yellow-300 shadow-ventry hover:shadow-yellow-500/20`;
-      default:
-        return `${baseClasses} bg-ventry-blue text-white border-2 border-ventry-blue hover:bg-ventry-blue-dark hover:border-ventry-blue-dark focus:ring-blue-300 shadow-ventry hover:shadow-ventry-hover`;
-    }
-  };
-  const getSizeClasses = () => {
-    switch (size) {
-      case "xs":
-        return "p-1.5 text-xs h-7 w-7";
-      case "sm":
-        return "p-2 text-sm h-8 w-8";
-      case "md":
-        return "p-2.5 text-base h-10 w-10";
-      case "lg":
-        return "p-3 text-lg h-12 w-12";
-      case "xl":
-        return "p-4 text-xl h-14 w-14";
-      default:
-        return "p-2.5 text-base h-10 w-10";
-    }
-  };
-  const getIconSize = () => {
-    switch (size) {
-      case "xs":
-        return "h-3 w-3";
-      case "sm":
-        return "h-4 w-4";
-      case "md":
-        return "h-5 w-5";
-      case "lg":
-        return "h-6 w-6";
-      case "xl":
-        return "h-7 w-7";
-      default:
-        return "h-5 w-5";
-    }
-  };
-  const renderContent = () => {
-    if (loading) {
-      return /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "div",
-        {
-          className: `animate-spin rounded-full border-b-2 border-current ${getIconSize()}`
-        }
-      );
-    }
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: getIconSize(), children });
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    "button",
-    {
-      className: `${getClasses()} ${getSizeClasses()} ${className}`,
-      disabled: disabled || loading,
-      onClick,
-      type,
-      title: tooltip,
-      "aria-label": tooltip,
       children: renderContent()
     }
   );
@@ -31786,216 +32050,1947 @@ const VentryInput = reactExports.forwardRef(
   }
 );
 
-function App() {
-  const [inputValue, setInputValue] = reactExports.useState("");
-  const FEATURES = [
+function Dashboard() {
+  const [timeFilter, setTimeFilter] = reactExports.useState("30d");
+  const kpiData = [
     {
-      title: "Modern Design System",
-      description: "Built with Ventry's beautiful blue and lime color palette for a modern, professional look.",
-      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiColorSwatch, { className: "h-8 w-8 text-ventry-blue" })
+      title: "Total Events",
+      value: "24",
+      change: 5,
+      changeType: "increase",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCalendar, { className: "h-6 w-6" })
     },
     {
-      title: "React + TypeScript",
-      description: "Type-safe development with modern React patterns and best practices.",
-      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCode, { className: "h-8 w-8 text-ventry-blue" })
+      title: "Upcoming Events",
+      value: "8",
+      change: 2,
+      changeType: "increase",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiEye, { className: "h-6 w-6" })
     },
     {
-      title: "Flowbite Integration",
-      description: "Enhanced Flowbite React components with custom Ventry theming and styling.",
-      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiTemplate, { className: "h-8 w-8 text-ventry-blue" })
+      title: "Total Tickets Sold",
+      value: "15,847",
+      change: -1,
+      changeType: "decrease",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiTicket, { className: "h-6 w-6" })
     },
     {
-      title: "Lightning Fast",
-      description: "Optimized for performance with Vite and modern build tools.",
-      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiLightningBolt, { className: "h-8 w-8 text-ventry-blue" })
+      title: "Revenue Generated",
+      value: "$284,950",
+      change: 12,
+      changeType: "increase",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCash, { className: "h-6 w-6" })
     }
   ];
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-screen bg-gray-50 dark:bg-gray-900", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(Sidebar, {}),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col flex-1 min-h-screen ml-64", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(Navbar, {}),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("main", { className: "flex-1 px-6 py-8", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-4xl mx-auto mb-12", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center mb-8", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "inline-flex items-center gap-3 mb-4", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "img",
-                {
-                  src: "/ventry-logo.svg",
-                  alt: "Ventry Logo",
-                  className: "h-12 w-12"
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-4xl font-bold text-gradient-ventry", children: "Ventry Design System" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto", children: "A modern, accessible design system built with React, TypeScript, and Tailwind CSS. Featuring beautiful components with Ventry's signature blue and lime color palette." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-8 mb-12", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Button Variants" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-4 justify-center", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", children: "Primary" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "secondary", children: "Secondary" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", children: "Outline" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", children: "Ghost" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "success", children: "Success" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "warning", children: "Warning" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "destructive", children: "Destructive" })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Button Sizes" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-4 justify-center", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", size: "xs", children: "Extra Small" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", size: "sm", children: "Small" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", size: "md", children: "Medium" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", size: "lg", children: "Large" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", size: "xl", children: "Extra Large" })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Button States" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-4 justify-center", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", children: "Normal" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", loading: true, children: "Loading..." }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", disabled: true, children: "Disabled" })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Buttons with Icons" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-4 justify-center", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiLightningBolt, {}), children: "Quick Action" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  VentryButton,
-                  {
-                    variant: "secondary",
-                    icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiStar, {}),
-                    iconPosition: "right",
-                    children: "Favorite"
-                  }
-                ),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCode, {}), children: "View Code" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "success", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiHeart, {}), children: "Like" })
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-md mx-auto", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Full Width Button" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", fullWidth: true, icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiTemplate, {}), children: "Get Started with Ventry" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Icon Buttons" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-4 justify-center", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryIconButton, { variant: "primary", tooltip: "Settings", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCog, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryIconButton, { variant: "secondary", tooltip: "Download", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDownload, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryIconButton, { variant: "outline", tooltip: "Share", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiShare, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryIconButton, { variant: "ghost", tooltip: "Close", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiX, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryIconButton, { variant: "success", size: "lg", tooltip: "Add", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}) }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  VentryIconButton,
-                  {
-                    variant: "destructive",
-                    size: "sm",
-                    tooltip: "Remove",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMinus, {})
-                  }
-                )
-              ] })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-2xl font-bold text-center mb-6 text-gray-900 dark:text-white", children: "Button Groups" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400 mb-3", children: "Attached Buttons" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", children: "Previous" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", children: "Current" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", children: "Next" })
-                  ] })
+  const recentEvents = [
+    {
+      id: "1",
+      name: "Summer Music Festival 2025",
+      ticketsSold: 1250,
+      capacity: 1500,
+      revenue: "$45,000",
+      checkinRate: 95,
+      status: "upcoming",
+      date: "2025-08-15"
+    },
+    {
+      id: "2",
+      name: "Tech Conference: Future Now",
+      ticketsSold: 850,
+      capacity: 1e3,
+      revenue: "$68,000",
+      checkinRate: 88,
+      status: "ongoing",
+      date: "2025-07-28"
+    },
+    {
+      id: "3",
+      name: "Food & Wine Tasting",
+      ticketsSold: 320,
+      capacity: 350,
+      revenue: "$19,200",
+      checkinRate: 92,
+      status: "ended",
+      date: "2025-07-20"
+    }
+  ];
+  const recentTransactions = [
+    {
+      id: "1",
+      userName: "Sarah Johnson",
+      ticketType: "VIP Pass",
+      price: "$120",
+      status: "completed",
+      date: "2025-07-30 14:23",
+      userType: "new"
+    },
+    {
+      id: "2",
+      userName: "Mike Chen",
+      ticketType: "General Admission",
+      price: "$45",
+      status: "completed",
+      date: "2025-07-30 14:18",
+      userType: "returning"
+    },
+    {
+      id: "3",
+      userName: "Emma Davis",
+      ticketType: "Early Bird",
+      price: "$35",
+      status: "pending",
+      date: "2025-07-30 14:15",
+      userType: "new"
+    }
+  ];
+  const quickActions = [
+    { label: "Create New Event", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), action: () => {
+    } },
+    { label: "Add Promo Code", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiGift, {}), action: () => {
+    } },
+    { label: "Invite Team Member", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiUserGroup, {}), action: () => {
+    } },
+    { label: "View Payouts", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCash, {}), action: () => {
+    } },
+    { label: "Send Campaign", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMail, {}), action: () => {
+    } },
+    { label: "Download Sales Report", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDownload, {}), action: () => {
+    } }
+  ];
+  const getChangeIcon = (changeType) => {
+    switch (changeType) {
+      case "increase":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiArrowUp, { className: "h-4 w-4 text-green-500" });
+      case "decrease":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiArrowDown, { className: "h-4 w-4 text-red-500" });
+      default:
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiMinus, { className: "h-4 w-4 text-gray-500" });
+    }
+  };
+  const getChangeColor = (changeType) => {
+    switch (changeType) {
+      case "increase":
+        return "text-green-600 dark:text-green-400";
+      case "decrease":
+        return "text-red-600 dark:text-red-400";
+      default:
+        return "text-gray-600 dark:text-gray-400";
+    }
+  };
+  const getStatusBadge = (status) => {
+    const baseClasses = "px-2 py-1 text-xs font-medium rounded-full";
+    switch (status) {
+      case "upcoming":
+        return `${baseClasses} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300`;
+      case "ongoing":
+        return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300`;
+      case "ended":
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300`;
+      case "completed":
+        return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300`;
+      case "pending":
+        return `${baseClasses} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300`;
+      case "failed":
+        return `${baseClasses} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300`;
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold text-gray-900 dark:text-white", children: "Dashboard" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Welcome back! Here's what's happening with your events." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDownload, {}), children: "Export Data" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), children: "Create Event" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6", children: kpiData.map((kpi, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-3 bg-ventry-blue/10 rounded-ventry text-ventry-blue", children: kpi.icon }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-gray-600 dark:text-gray-400", children: kpi.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold text-gray-900 dark:text-white", children: kpi.value })
+        ] })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "div",
+        {
+          className: `flex items-center gap-1 mt-4 ${getChangeColor(kpi.changeType)}`,
+          children: [
+            getChangeIcon(kpi.changeType),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-medium", children: [
+              Math.abs(kpi.change),
+              "%",
+              " ",
+              kpi.changeType === "neutral" ? "Same as" : "from",
+              " last month"
+            ] })
+          ]
+        }
+      )
+    ] }, index)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-3 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "lg:col-span-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white", children: "Ticket Sales Trend" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: timeFilter === "7d" ? "primary" : "outline",
+                size: "sm",
+                onClick: () => setTimeFilter("7d"),
+                children: "7 days"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: timeFilter === "30d" ? "primary" : "outline",
+                size: "sm",
+                onClick: () => setTimeFilter("30d"),
+                children: "30 days"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: timeFilter === "custom" ? "primary" : "outline",
+                size: "sm",
+                onClick: () => setTimeFilter("custom"),
+                children: "Custom"
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-64 bg-gradient-to-br from-ventry-blue/5 to-ventry-lime/5 rounded-ventry flex items-center justify-center border-2 border-dashed border-ventry-blue/20", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiChartBar, { className: "h-12 w-12 text-ventry-blue mx-auto mb-2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Chart visualization will be implemented here" })
+        ] }) })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-6", children: "Quick Actions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: quickActions.map((action, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: "ghost",
+            fullWidth: true,
+            icon: action.icon,
+            className: "justify-start",
+            onClick: action.action,
+            children: action.label
+          },
+          index
+        )) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white", children: "Event Snapshot" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", size: "sm", children: "View All" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: recentEvents.map((event) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "border border-gray-200 dark:border-gray-700 rounded-ventry p-4 hover:shadow-ventry transition-shadow",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-2", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-gray-900 dark:text-white", children: event.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: getStatusBadge(event.status), children: event.status.charAt(0).toUpperCase() + event.status.slice(1) })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-400", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "Tickets:" }),
+                  " ",
+                  event.ticketsSold,
+                  "/",
+                  event.capacity
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400 mb-3", children: "Separated Buttons" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDownload, {}), children: "Download" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "secondary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiShare, {}), children: "Share" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiHeart, {}), children: "Like" })
-                  ] })
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "Revenue:" }),
+                  " ",
+                  event.revenue
                 ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400 mb-3", children: "Vertical Button Group" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                    VentryButtonGroup,
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "Check-in:" }),
+                  " ",
+                  event.checkinRate,
+                  "%"
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "Date:" }),
+                  " ",
+                  event.date
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2 mt-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", size: "sm", children: "View Details" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", children: "Edit" })
+              ] })
+            ]
+          },
+          event.id
+        )) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white", children: "Recent Transactions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-1 text-sm text-green-600 dark:text-green-400", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-2 w-2 bg-green-500 rounded-full animate-pulse" }),
+            "Live"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: recentTransactions.map((transaction) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-ventry",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 mb-1", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-gray-900 dark:text-white", children: transaction.userName }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "span",
                     {
-                      orientation: "vertical",
-                      className: "inline-flex",
-                      children: [
-                        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", fullWidth: true, children: "Option 1" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", fullWidth: true, children: "Option 2" }),
-                        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", fullWidth: true, children: "Option 3" })
-                      ]
+                      className: `px-2 py-0.5 text-xs rounded-full ${transaction.userType === "new" ? "bg-ventry-lime/20 text-ventry-lime-dark" : "bg-ventry-blue/20 text-ventry-blue"}`,
+                      children: transaction.userType
                     }
                   )
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-gray-600 dark:text-gray-400", children: [
+                  transaction.ticketType,
+                  " • ",
+                  transaction.date
                 ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-right", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold text-gray-900 dark:text-white", children: transaction.price }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: getStatusBadge(transaction.status), children: transaction.status })
+              ] })
+            ]
+          },
+          transaction.id
+        )) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-6", children: "Promo Code Performance" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center p-4 bg-ventry-blue/5 rounded-ventry", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-ventry-blue", children: "12" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Active Codes" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center p-4 bg-ventry-lime/5 rounded-ventry", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-ventry-lime-dark", children: "SUMMER25" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Most Used" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-ventry", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-green-600", children: "$12,450" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Promo Revenue" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center p-4 bg-blue-50 dark:bg-blue-900/20 rounded-ventry", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-blue-600", children: "28%" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Conversion Rate" })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-6", children: "Alerts & Notifications" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-ventry border border-yellow-200 dark:border-yellow-800", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiTicket, { className: "h-5 w-5 text-yellow-600" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-yellow-800 dark:text-yellow-200", children: "Low ticket inventory" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-yellow-600 dark:text-yellow-400", children: "Summer Festival has only 8 tickets left" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-ventry border border-blue-200 dark:border-blue-800", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiEye, { className: "h-5 w-5 text-blue-600" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-blue-800 dark:text-blue-200", children: "Events pending review" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-blue-600 dark:text-blue-400", children: "2 events waiting for admin approval" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-ventry border border-green-200 dark:border-green-800", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiTrendingUp, { className: "h-5 w-5 text-green-600" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-green-800 dark:text-green-200", children: "New feature available" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-green-600 dark:text-green-400", children: "Seating charts now support drag & drop" })
+            ] })
+          ] })
+        ] })
+      ] })
+    ] })
+  ] });
+}
+
+function AllEvents() {
+  const [searchTerm, setSearchTerm] = reactExports.useState("");
+  const [statusFilter, setStatusFilter] = reactExports.useState("all");
+  const events = [
+    {
+      id: "1",
+      title: "Summer Music Festival 2025",
+      status: "published",
+      ticketsSold: 1250,
+      totalCapacity: 1500,
+      revenue: "$45,000",
+      date: "2025-08-15",
+      location: "Central Park, NYC",
+      category: "Music"
+    },
+    {
+      id: "2",
+      title: "Tech Conference: Future Now",
+      status: "pending",
+      ticketsSold: 850,
+      totalCapacity: 1e3,
+      revenue: "$68,000",
+      date: "2025-07-28",
+      location: "Convention Center",
+      category: "Conference"
+    },
+    {
+      id: "3",
+      title: "Food & Wine Tasting",
+      status: "draft",
+      ticketsSold: 0,
+      totalCapacity: 350,
+      revenue: "$0",
+      date: "2025-09-20",
+      location: "Downtown Hotel",
+      category: "Food & Drink"
+    },
+    {
+      id: "4",
+      title: "Art Gallery Opening",
+      status: "rejected",
+      ticketsSold: 0,
+      totalCapacity: 200,
+      revenue: "$0",
+      date: "2025-08-05",
+      location: "Modern Art Museum",
+      category: "Art"
+    },
+    {
+      id: "5",
+      title: "Jazz Night Live",
+      status: "ended",
+      ticketsSold: 180,
+      totalCapacity: 200,
+      revenue: "$9,000",
+      date: "2025-07-15",
+      location: "Blue Note Club",
+      category: "Music"
+    }
+  ];
+  const getStatusBadge = (status) => {
+    const baseClasses = "px-3 py-1 text-xs font-medium rounded-full";
+    switch (status) {
+      case "published":
+        return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300`;
+      case "pending":
+        return `${baseClasses} bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300`;
+      case "draft":
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300`;
+      case "rejected":
+        return `${baseClasses} bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300`;
+      case "ended":
+        return `${baseClasses} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300`;
+    }
+  };
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case "published":
+        return "✅";
+      case "pending":
+        return "⏳";
+      case "draft":
+        return "📝";
+      case "rejected":
+        return "❌";
+      case "ended":
+        return "🏁";
+      default:
+        return "❓";
+    }
+  };
+  const filteredEvents = events.filter((event) => {
+    const matchesSearch = event.title.toLowerCase().includes(searchTerm.toLowerCase()) || event.location.toLowerCase().includes(searchTerm.toLowerCase()) || event.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || event.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold text-gray-900 dark:text-white", children: "All Events" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Manage all your events from creation to completion" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), children: "Create New Event" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryCard, { className: "p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col lg:flex-row gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        VentryInput,
+        {
+          placeholder: "Search events, locations, or categories...",
+          value: searchTerm,
+          onChange: (e) => setSearchTerm(e.target.value)
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: statusFilter === "all" ? "primary" : "outline",
+              size: "sm",
+              onClick: () => setStatusFilter("all"),
+              children: "All"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: statusFilter === "published" ? "primary" : "outline",
+              size: "sm",
+              onClick: () => setStatusFilter("published"),
+              children: "Published"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: statusFilter === "pending" ? "primary" : "outline",
+              size: "sm",
+              onClick: () => setStatusFilter("pending"),
+              children: "Pending"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: statusFilter === "draft" ? "primary" : "outline",
+              size: "sm",
+              onClick: () => setStatusFilter("draft"),
+              children: "Drafts"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiFilter, {}), size: "sm", children: "More Filters" })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6", children: filteredEvents.map((event) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      VentryCard,
+      {
+        className: "p-6 hover:shadow-ventry transition-shadow",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-lg", children: getStatusIcon(event.status) }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: getStatusBadge(event.status), children: event.status.charAt(0).toUpperCase() + event.status.slice(1) })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-right", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Revenue" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-bold text-ventry-blue", children: event.revenue })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-2", children: event.title }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiCalendar, { className: "h-4 w-4" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: event.date })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiTicket, { className: "h-4 w-4" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: event.location })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "px-2 py-1 bg-ventry-blue/10 text-ventry-blue rounded text-xs font-medium", children: event.category }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between text-sm mb-1", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-600 dark:text-gray-400", children: "Tickets Sold" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-medium text-gray-900 dark:text-white", children: [
+                event.ticketsSold,
+                "/",
+                event.totalCapacity
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "div",
+              {
+                className: "bg-ventry-blue h-2 rounded-full transition-all",
+                style: {
+                  width: `${Math.min(event.ticketsSold / event.totalCapacity * 100, 100)}%`
+                }
+              }
+            ) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-gray-500 dark:text-gray-400 mt-1", children: [
+              Math.round(event.ticketsSold / event.totalCapacity * 100),
+              "% capacity"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: "outline",
+                size: "sm",
+                icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiEye, {}),
+                fullWidth: true,
+                children: "View"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: "ghost",
+                size: "sm",
+                icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPencil, {}),
+                fullWidth: true,
+                children: "Edit"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDuplicate, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Duplicate" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiChartBar, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Analytics" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDownload, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Export" }) })
+          ] })
+        ]
+      },
+      event.id
+    )) }),
+    filteredEvents.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-12 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiCalendar, { className: "h-16 w-16 text-gray-400 mx-auto mb-4" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-2", children: "No events found" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400 mb-6", children: searchTerm || statusFilter !== "all" ? "Try adjusting your filters or search terms" : "Get started by creating your first event" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), children: "Create New Event" })
+    ] })
+  ] });
+}
+
+function CreateEvent() {
+  const [currentStep, setCurrentStep] = reactExports.useState(1);
+  const [formData, setFormData] = reactExports.useState({
+    title: "",
+    description: "",
+    category: "",
+    ticketingType: "direct",
+    paymentType: "paid",
+    eventDate: "",
+    startTime: "",
+    endTime: "",
+    doorsOpenTime: "",
+    salesStartDate: "",
+    salesEndDate: "",
+    totalCapacity: 100,
+    ticketFormat: "individual",
+    locationName: "",
+    mapUrl: "",
+    artists: "",
+    ageRestriction: "",
+    visibility: "public",
+    venueId: "",
+    refundPolicy: ""
+  });
+  const [ticketTypes, setTicketTypes] = reactExports.useState([
+    {
+      id: "1",
+      name: "General Admission",
+      price: 50,
+      capacity: 80,
+      description: "Standard event access"
+    }
+  ]);
+  const [customQuestions, setCustomQuestions] = reactExports.useState([]);
+  const [coverImage, setCoverImage] = reactExports.useState(null);
+  const [promoVideo, setPromoVideo] = reactExports.useState(null);
+  const totalSteps = 4;
+  const categories = [
+    "Concert",
+    "Festival",
+    "Conference",
+    "Workshop",
+    "Theater",
+    "Sports",
+    "Food & Drink",
+    "Art & Culture",
+    "Networking",
+    "Other"
+  ];
+  const venues = [
+    { id: "1", name: "Central Park Amphitheater", location: "New York, NY" },
+    { id: "2", name: "Convention Center Hall A", location: "Los Angeles, CA" },
+    { id: "3", name: "Riverside Music Venue", location: "Chicago, IL" }
+  ];
+  const handleInputChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+  const addTicketType = () => {
+    const newTicket = {
+      id: Date.now().toString(),
+      name: "",
+      price: 0,
+      capacity: 0,
+      description: ""
+    };
+    setTicketTypes([...ticketTypes, newTicket]);
+  };
+  const removeTicketType = (id) => {
+    setTicketTypes(ticketTypes.filter((ticket) => ticket.id !== id));
+  };
+  const updateTicketType = (id, field, value) => {
+    setTicketTypes(
+      ticketTypes.map(
+        (ticket) => ticket.id === id ? { ...ticket, [field]: value } : ticket
+      )
+    );
+  };
+  const addCustomQuestion = () => {
+    const newQuestion = {
+      id: Date.now().toString(),
+      question: "",
+      required: false,
+      type: "text"
+    };
+    setCustomQuestions([...customQuestions, newQuestion]);
+  };
+  const removeCustomQuestion = (id) => {
+    setCustomQuestions(customQuestions.filter((q) => q.id !== id));
+  };
+  const updateCustomQuestion = (id, field, value) => {
+    setCustomQuestions(
+      customQuestions.map((q) => q.id === id ? { ...q, [field]: value } : q)
+    );
+  };
+  const handleImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setCoverImage(file);
+    }
+  };
+  const handleVideoUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setPromoVideo(file);
+    }
+  };
+  const nextStep = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+  const prevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+  const getStepTitle = (step) => {
+    switch (step) {
+      case 1:
+        return "Basic Information";
+      case 2:
+        return "Date & Time";
+      case 3:
+        return "Tickets & Pricing";
+      case 4:
+        return "Media & Settings";
+      default:
+        return "Event Details";
+    }
+  };
+  const renderStep1 = () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      VentryInput,
+      {
+        label: "Event Title",
+        placeholder: "Enter your event title",
+        value: formData.title,
+        onChange: (e) => handleInputChange("title", e.target.value),
+        required: true
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event Description" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "textarea",
+        {
+          className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+          rows: 4,
+          placeholder: "Describe your event in detail",
+          value: formData.description,
+          onChange: (e) => handleInputChange("description", e.target.value)
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event Category" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+          value: formData.category,
+          onChange: (e) => handleInputChange("category", e.target.value),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Select a category" }),
+            categories.map((category) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: category, children: category }, category))
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Ticketing Type" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: formData.ticketingType === "direct" ? "primary" : "outline",
+              onClick: () => handleInputChange("ticketingType", "direct"),
+              children: "Direct Buy"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: formData.ticketingType === "request" ? "primary" : "outline",
+              onClick: () => handleInputChange("ticketingType", "request"),
+              children: "Request Approval"
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Payment Type" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: formData.paymentType === "free" ? "primary" : "outline",
+              onClick: () => handleInputChange("paymentType", "free"),
+              children: "Free"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: formData.paymentType === "paid" ? "primary" : "outline",
+              onClick: () => handleInputChange("paymentType", "paid"),
+              children: "Paid"
+            }
+          )
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      VentryInput,
+      {
+        label: "Event Location",
+        placeholder: "Enter venue or location name",
+        value: formData.locationName,
+        onChange: (e) => handleInputChange("locationName", e.target.value),
+        required: true
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      VentryInput,
+      {
+        label: "Google Maps URL (Optional)",
+        placeholder: "https://maps.google.com/...",
+        value: formData.mapUrl,
+        onChange: (e) => handleInputChange("mapUrl", e.target.value)
+      }
+    )
+  ] });
+  const renderStep2 = () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event Date *" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "date",
+            className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+            value: formData.eventDate,
+            onChange: (e) => handleInputChange("eventDate", e.target.value),
+            required: true
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        VentryInput,
+        {
+          label: "Total Capacity",
+          type: "number",
+          placeholder: "100",
+          value: formData.totalCapacity.toString(),
+          onChange: (e) => handleInputChange("totalCapacity", parseInt(e.target.value) || 0),
+          required: true
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Doors Open Time *" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "time",
+            className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+            value: formData.doorsOpenTime,
+            onChange: (e) => handleInputChange("doorsOpenTime", e.target.value),
+            required: true
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event Start Time *" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "time",
+            className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+            value: formData.startTime,
+            onChange: (e) => handleInputChange("startTime", e.target.value),
+            required: true
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event End Time *" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "time",
+            className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+            value: formData.endTime,
+            onChange: (e) => handleInputChange("endTime", e.target.value),
+            required: true
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Ticket Sales Start *" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "datetime-local",
+            className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+            value: formData.salesStartDate,
+            onChange: (e) => handleInputChange("salesStartDate", e.target.value),
+            required: true
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Ticket Sales End *" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "datetime-local",
+            className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+            value: formData.salesEndDate,
+            onChange: (e) => handleInputChange("salesEndDate", e.target.value),
+            required: true
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      VentryInput,
+      {
+        label: "Artists/Performers (Optional)",
+        placeholder: "Artist names, separated by commas",
+        value: formData.artists,
+        onChange: (e) => handleInputChange("artists", e.target.value)
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      VentryInput,
+      {
+        label: "Age Restriction (Optional)",
+        type: "number",
+        placeholder: "18",
+        value: formData.ageRestriction,
+        onChange: (e) => handleInputChange("ageRestriction", e.target.value)
+      }
+    )
+  ] });
+  const renderStep3 = () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Ticket Format" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: formData.ticketFormat === "individual" ? "primary" : "outline",
+            onClick: () => handleInputChange("ticketFormat", "individual"),
+            children: "Individual"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: formData.ticketFormat === "bundle" ? "primary" : "outline",
+            onClick: () => handleInputChange("ticketFormat", "bundle"),
+            children: "Bundle"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: formData.ticketFormat === "both" ? "primary" : "outline",
+            onClick: () => handleInputChange("ticketFormat", "both"),
+            children: "Both"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold text-gray-900 dark:text-white", children: "Ticket Types" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: "outline",
+            size: "sm",
+            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}),
+            onClick: addTicketType,
+            children: "Add Ticket Type"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: ticketTypes.map((ticket, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "font-medium text-gray-900 dark:text-white", children: [
+            "Ticket Type ",
+            index + 1
+          ] }),
+          ticketTypes.length > 1 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: "ghost",
+              size: "sm",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMinus, {}),
+              onClick: () => removeTicketType(ticket.id),
+              children: "Remove"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryInput,
+            {
+              label: "Ticket Name",
+              placeholder: "e.g., General Admission",
+              value: ticket.name,
+              onChange: (e) => updateTicketType(ticket.id, "name", e.target.value)
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryInput,
+            {
+              label: "Price ($)",
+              type: "number",
+              placeholder: "50",
+              value: ticket.price.toString(),
+              onChange: (e) => updateTicketType(
+                ticket.id,
+                "price",
+                parseFloat(e.target.value) || 0
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryInput,
+            {
+              label: "Capacity",
+              type: "number",
+              placeholder: "100",
+              value: ticket.capacity.toString(),
+              onChange: (e) => updateTicketType(
+                ticket.id,
+                "capacity",
+                parseInt(e.target.value) || 0
+              )
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryInput,
+            {
+              label: "Description",
+              placeholder: "Brief description",
+              value: ticket.description,
+              onChange: (e) => updateTicketType(ticket.id, "description", e.target.value)
+            }
+          )
+        ] })
+      ] }, ticket.id)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold text-gray-900 dark:text-white", children: "Custom Attendee Questions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: "outline",
+            size: "sm",
+            icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}),
+            onClick: addCustomQuestion,
+            children: "Add Question"
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: customQuestions.map((question, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("h4", { className: "font-medium text-gray-900 dark:text-white", children: [
+            "Question ",
+            index + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryButton,
+            {
+              variant: "ghost",
+              size: "sm",
+              icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMinus, {}),
+              onClick: () => removeCustomQuestion(question.id),
+              children: "Remove"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 md:grid-cols-3 gap-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "md:col-span-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            VentryInput,
+            {
+              label: "Question",
+              placeholder: "What's your dietary preference?",
+              value: question.question,
+              onChange: (e) => updateCustomQuestion(
+                question.id,
+                "question",
+                e.target.value
+              )
+            }
+          ) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Type" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+                value: question.type,
+                onChange: (e) => updateCustomQuestion(question.id, "type", e.target.value),
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "text", children: "Text" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "textarea", children: "Textarea" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "select", children: "Select" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "checkbox", children: "Checkbox" })
+                ]
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: question.required,
+              onChange: (e) => updateCustomQuestion(
+                question.id,
+                "required",
+                e.target.checked
+              ),
+              className: "rounded border-gray-300 text-ventry-blue focus:ring-ventry-blue"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-gray-700 dark:text-gray-300", children: "Required" })
+        ] }) })
+      ] }, question.id)) })
+    ] })
+  ] });
+  const renderStep4 = () => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event Cover Image *" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-ventry p-6 text-center", children: [
+        coverImage ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "img",
+            {
+              src: URL.createObjectURL(coverImage),
+              alt: "Cover preview",
+              className: "max-h-32 mx-auto rounded-ventry"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400", children: coverImage.name })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiPhotograph, { className: "h-12 w-12 text-gray-400 mx-auto" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Upload event cover image" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "file",
+            accept: "image/*",
+            onChange: handleImageUpload,
+            className: "mt-2"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Promo Video (Optional)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-ventry p-6 text-center", children: [
+        promoVideo ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiVideoCamera, { className: "h-12 w-12 text-ventry-blue mx-auto" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400", children: promoVideo.name })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiVideoCamera, { className: "h-12 w-12 text-gray-400 mx-auto" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Upload promotional video" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "file",
+            accept: "video/*",
+            onChange: handleVideoUpload,
+            className: "mt-2"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Event Visibility" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: formData.visibility === "public" ? "primary" : "outline",
+            onClick: () => handleInputChange("visibility", "public"),
+            children: "Public"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: formData.visibility === "private" ? "primary" : "outline",
+            onClick: () => handleInputChange("visibility", "private"),
+            children: "Private"
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Select Venue" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "select",
+        {
+          className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+          value: formData.venueId,
+          onChange: (e) => handleInputChange("venueId", e.target.value),
+          children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "Select existing venue or add new" }),
+            venues.map((venue) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: venue.id, children: [
+              venue.name,
+              " - ",
+              venue.location
+            ] }, venue.id))
+          ]
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Refund Policy (Optional)" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "textarea",
+        {
+          className: "w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-ventry focus:outline-none focus:ring-2 focus:ring-ventry-blue dark:bg-gray-800 dark:text-white",
+          rows: 3,
+          placeholder: "Describe your refund policy for this event",
+          value: formData.refundPolicy,
+          onChange: (e) => handleInputChange("refundPolicy", e.target.value)
+        }
+      )
+    ] })
+  ] });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold text-gray-900 dark:text-white", children: "Create New Event" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Fill in the details to create your event" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-between mb-6", children: Array.from({ length: totalSteps }, (_, i) => {
+        const stepNumber = i + 1;
+        const isActive = stepNumber === currentStep;
+        const isCompleted = stepNumber < currentStep;
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: `w-10 h-10 rounded-full flex items-center justify-center text-sm font-medium ${isActive ? "bg-ventry-blue text-white" : isCompleted ? "bg-green-500 text-white" : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400"}`,
+              children: stepNumber
+            }
+          ),
+          stepNumber < totalSteps && /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "div",
+            {
+              className: `w-12 h-1 mx-2 ${stepNumber < currentStep ? "bg-green-500" : "bg-gray-200 dark:bg-gray-700"}`
+            }
+          )
+        ] }, stepNumber);
+      }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-xl font-semibold text-gray-900 dark:text-white text-center", children: [
+        "Step ",
+        currentStep,
+        ": ",
+        getStepTitle(currentStep)
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+      currentStep === 1 && renderStep1(),
+      currentStep === 2 && renderStep2(),
+      currentStep === 3 && renderStep3(),
+      currentStep === 4 && renderStep4()
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        VentryButton,
+        {
+          variant: "outline",
+          onClick: prevStep,
+          disabled: currentStep === 1,
+          children: "Previous"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiSave, {}), children: "Save Draft" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiEye, {}), children: "Preview" }),
+        currentStep < totalSteps ? /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", onClick: nextStep, children: "Next Step" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiUpload, {}), children: "Submit for Review" })
+      ] })
+    ] })
+  ] });
+}
+
+function VenueManagement() {
+  const [searchTerm, setSearchTerm] = reactExports.useState("");
+  const [typeFilter, setTypeFilter] = reactExports.useState("all");
+  const venues = [
+    {
+      id: "1",
+      name: "Central Park Amphitheater",
+      type: "outdoor",
+      location: "New York, NY",
+      capacity: 2e3,
+      facilities: ["Parking", "Accessibility", "Restrooms", "Food Service"],
+      contactPerson: "John Smith",
+      hasSeatingMap: true
+    },
+    {
+      id: "2",
+      name: "Convention Center Hall A",
+      type: "indoor",
+      location: "Los Angeles, CA",
+      capacity: 1500,
+      facilities: [
+        "Parking",
+        "Accessibility",
+        "Restrooms",
+        "Wi-Fi",
+        "A/V Equipment"
+      ],
+      contactPerson: "Sarah Johnson",
+      hasSeatingMap: true
+    },
+    {
+      id: "3",
+      name: "Virtual Event Platform",
+      type: "online",
+      location: "Online",
+      capacity: 1e4,
+      facilities: ["Live Streaming", "Chat", "Breakout Rooms", "Recording"],
+      contactPerson: "Tech Support",
+      hasSeatingMap: false
+    },
+    {
+      id: "4",
+      name: "Riverside Music Venue",
+      type: "indoor",
+      location: "Chicago, IL",
+      capacity: 800,
+      facilities: ["Parking", "Bar Service", "Sound System", "Stage Lighting"],
+      contactPerson: "Mike Chen",
+      hasSeatingMap: false
+    }
+  ];
+  const getTypeIcon = (type) => {
+    switch (type) {
+      case "indoor":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiOfficeBuilding, { className: "h-5 w-5" });
+      case "outdoor":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiLocationMarker, { className: "h-5 w-5" });
+      case "online":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiWifi, { className: "h-5 w-5" });
+      default:
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiLocationMarker, { className: "h-5 w-5" });
+    }
+  };
+  const getTypeBadge = (type) => {
+    const baseClasses = "px-2 py-1 text-xs font-medium rounded-full";
+    switch (type) {
+      case "indoor":
+        return `${baseClasses} bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300`;
+      case "outdoor":
+        return `${baseClasses} bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300`;
+      case "online":
+        return `${baseClasses} bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300`;
+      default:
+        return `${baseClasses} bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300`;
+    }
+  };
+  const getFacilityIcon = (facility) => {
+    switch (facility.toLowerCase()) {
+      case "parking":
+        return "🚗";
+      case "accessibility":
+        return "♿";
+      case "restrooms":
+        return "🚻";
+      case "wi-fi":
+        return "📶";
+      case "food service":
+        return "🍽️";
+      case "a/v equipment":
+        return "🎥";
+      case "live streaming":
+        return "📹";
+      case "chat":
+        return "💬";
+      case "breakout rooms":
+        return "👥";
+      case "recording":
+        return "🎬";
+      case "bar service":
+        return "🍺";
+      case "sound system":
+        return "🎵";
+      case "stage lighting":
+        return "💡";
+      default:
+        return "✅";
+    }
+  };
+  const filteredVenues = venues.filter((venue) => {
+    const matchesSearch = venue.name.toLowerCase().includes(searchTerm.toLowerCase()) || venue.location.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === "all" || venue.type === typeFilter;
+    return matchesSearch && matchesType;
+  });
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold text-gray-900 dark:text-white", children: "Venue Management" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Manage your event venues and locations" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), children: "Add New Venue" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryCard, { className: "p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col lg:flex-row gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        VentryInput,
+        {
+          placeholder: "Search venues or locations...",
+          value: searchTerm,
+          onChange: (e) => setSearchTerm(e.target.value)
+        }
+      ) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: typeFilter === "all" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTypeFilter("all"),
+            children: "All Types"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: typeFilter === "indoor" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTypeFilter("indoor"),
+            children: "Indoor"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: typeFilter === "outdoor" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTypeFilter("outdoor"),
+            children: "Outdoor"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: typeFilter === "online" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTypeFilter("online"),
+            children: "Online"
+          }
+        )
+      ] }) })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 sm:grid-cols-4 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6 text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-ventry-blue", children: venues.length }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Total Venues" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6 text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-green-600", children: venues.filter((v) => v.type === "indoor").length }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Indoor Venues" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6 text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-blue-600", children: venues.filter((v) => v.type === "outdoor").length }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "Outdoor Venues" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6 text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl font-bold text-purple-600", children: venues.filter((v) => v.hasSeatingMap).length }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: "With Seating Maps" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6", children: filteredVenues.map((venue) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      VentryCard,
+      {
+        className: "p-6 hover:shadow-ventry transition-shadow",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              getTypeIcon(venue.type),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: getTypeBadge(venue.type), children: venue.type.charAt(0).toUpperCase() + venue.type.slice(1) })
+            ] }),
+            venue.hasSeatingMap && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1 text-ventry-blue", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMap, { className: "h-4 w-4" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium", children: "Seating Map" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-2", children: venue.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiLocationMarker, { className: "h-4 w-4" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: venue.location })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiUsers, { className: "h-4 w-4" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                "Capacity: ",
+                venue.capacity.toLocaleString()
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-gray-600 dark:text-gray-400", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: "Contact:" }),
+              " ",
+              venue.contactPerson
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-gray-700 dark:text-gray-300 mb-2", children: "Facilities:" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-1", children: [
+              venue.facilities.slice(0, 4).map((facility, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "span",
+                {
+                  className: "inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700 text-xs rounded-full",
+                  title: facility,
+                  children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: getFacilityIcon(facility) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-gray-700 dark:text-gray-300", children: facility })
+                  ]
+                },
+                index
+              )),
+              venue.facilities.length > 4 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center px-2 py-1 bg-ventry-blue/10 text-ventry-blue text-xs rounded-full", children: [
+                "+",
+                venue.facilities.length - 4,
+                " more"
               ] })
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-md mx-auto mb-12", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-            VentryInput,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: "outline",
+                size: "sm",
+                icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiEye, {}),
+                fullWidth: true,
+                children: "View Details"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: "ghost",
+                size: "sm",
+                icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPencil, {}),
+                fullWidth: true,
+                children: "Edit"
+              }
+            ),
+            venue.hasSeatingMap ? /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMap, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "View Map" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Add Map" }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "ghost", size: "sm", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiTrash, {}), children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Delete" }) })
+          ] })
+        ]
+      },
+      venue.id
+    )) }),
+    filteredVenues.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-12 text-center", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiLocationMarker, { className: "h-16 w-16 text-gray-400 mx-auto mb-4" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-2", children: "No venues found" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400 mb-6", children: searchTerm || typeFilter !== "all" ? "Try adjusting your filters or search terms" : "Get started by adding your first venue" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiPlus, {}), children: "Add New Venue" })
+    ] })
+  ] });
+}
+
+function Analytics() {
+  const [timeRange, setTimeRange] = reactExports.useState(
+    "30d"
+  );
+  const [chartType, setChartType] = reactExports.useState("revenue");
+  const metrics = [
+    {
+      title: "Total Revenue",
+      value: "$284,950",
+      change: 12.5,
+      trend: "up",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCash, { className: "h-6 w-6" }),
+      color: "ventry-blue"
+    },
+    {
+      title: "Tickets Sold",
+      value: "15,847",
+      change: -2.1,
+      trend: "down",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiTicket, { className: "h-6 w-6" }),
+      color: "green"
+    },
+    {
+      title: "Total Attendees",
+      value: "14,532",
+      change: 8.3,
+      trend: "up",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiUsers, { className: "h-6 w-6" }),
+      color: "blue"
+    },
+    {
+      title: "Events Completed",
+      value: "48",
+      change: 0,
+      trend: "neutral",
+      icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiCalendar, { className: "h-6 w-6" }),
+      color: "purple"
+    }
+  ];
+  const topEvents = [
+    {
+      name: "Summer Music Festival 2025",
+      revenue: "$45,000",
+      tickets: 1250,
+      attendance: 1188,
+      rating: 4.8
+    },
+    {
+      name: "Tech Conference: Future Now",
+      revenue: "$68,000",
+      tickets: 850,
+      attendance: 798,
+      rating: 4.6
+    },
+    {
+      name: "Food & Wine Tasting",
+      revenue: "$19,200",
+      tickets: 320,
+      attendance: 294,
+      rating: 4.9
+    },
+    {
+      name: "Jazz Night Live",
+      revenue: "$9,000",
+      tickets: 180,
+      attendance: 168,
+      rating: 4.7
+    }
+  ];
+  const audienceInsights = [
+    { segment: "New Customers", percentage: 45, count: "6,539" },
+    { segment: "Returning Customers", percentage: 35, count: "5,086" },
+    { segment: "VIP Members", percentage: 15, count: "2,180" },
+    { segment: "Corporate", percentage: 5, count: "727" }
+  ];
+  const getColorClasses = (color) => {
+    switch (color) {
+      case "ventry-blue":
+        return "bg-ventry-blue/10 text-ventry-blue border-ventry-blue/20";
+      case "green":
+        return "bg-green-100 text-green-600 border-green-200 dark:bg-green-900/20 dark:text-green-400";
+      case "blue":
+        return "bg-blue-100 text-blue-600 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400";
+      case "purple":
+        return "bg-purple-100 text-purple-600 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400";
+      default:
+        return "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400";
+    }
+  };
+  const getTrendIcon = (trend) => {
+    switch (trend) {
+      case "up":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiTrendingUp, { className: "h-4 w-4 text-green-500" });
+      case "down":
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(HiTrendingDown, { className: "h-4 w-4 text-red-500" });
+      default:
+        return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-4 w-4 text-gray-500", children: "→" });
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-3xl font-bold text-gray-900 dark:text-white", children: "Analytics Overview" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "Track your event performance and audience insights" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiFilter, {}), children: "Filters" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", icon: /* @__PURE__ */ jsxRuntimeExports.jsx(HiDownload, {}), children: "Export Report" })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(VentryCard, { className: "p-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-gray-900 dark:text-white", children: "Performance Metrics" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: timeRange === "7d" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTimeRange("7d"),
+            children: "7 Days"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: timeRange === "30d" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTimeRange("30d"),
+            children: "30 Days"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: timeRange === "90d" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTimeRange("90d"),
+            children: "90 Days"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          VentryButton,
+          {
+            variant: timeRange === "1y" ? "primary" : "outline",
+            size: "sm",
+            onClick: () => setTimeRange("1y"),
+            children: "1 Year"
+          }
+        )
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6", children: metrics.map((metric, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "div",
+          {
+            className: `p-3 rounded-ventry border ${getColorClasses(metric.color)}`,
+            children: metric.icon
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1", children: [
+          getTrendIcon(metric.trend),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "span",
             {
-              label: "Try our custom input",
-              placeholder: "Enter some text...",
-              value: inputValue,
-              onChange: (e) => setInputValue(e.target.value)
+              className: `text-sm font-medium ${metric.trend === "up" ? "text-green-600" : metric.trend === "down" ? "text-red-600" : "text-gray-600"}`,
+              children: metric.change !== 0 && `${metric.change > 0 ? "+" : ""}${metric.change}%`
             }
-          ) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-6xl mx-auto mb-12", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-3xl font-bold text-center mb-8 text-gray-900 dark:text-white", children: "Features & Components" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-6", children: FEATURES.map((feature, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(VentryCard, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-shrink-0 p-3 bg-ventry-blue/10 rounded-ventry", children: feature.icon }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-2", children: feature.title }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: feature.description })
-            ] })
-          ] }) }, index)) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "max-w-4xl mx-auto mb-12", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-3xl font-bold text-center mb-8 text-gray-900 dark:text-white", children: "Color Palette" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 w-full bg-ventry-blue rounded-ventry mb-2 shadow-ventry" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-gray-700 dark:text-gray-300", children: "Ventry Blue" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-500", children: "#0b26fb" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 w-full bg-ventry-blue-dark rounded-ventry mb-2 shadow-ventry" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-gray-700 dark:text-gray-300", children: "Blue Dark" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-500", children: "#0920d9" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 w-full bg-ventry-lime rounded-ventry mb-2 shadow-ventry" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-gray-700 dark:text-gray-300", children: "Ventry Lime" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-500", children: "#d9fd07" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-16 w-full bg-ventry-lime-dark rounded-ventry mb-2 shadow-ventry" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-gray-700 dark:text-gray-300", children: "Lime Dark" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-500", children: "#c4e607" })
-            ] })
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-600 dark:text-gray-400 mb-1", children: metric.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-2xl font-bold text-gray-900 dark:text-white", children: metric.value })
+      ] })
+    ] }, index)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white", children: "Trends Over Time" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryButtonGroup, { attached: true, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: chartType === "revenue" ? "primary" : "outline",
+                size: "sm",
+                onClick: () => setChartType("revenue"),
+                children: "Revenue"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: chartType === "tickets" ? "primary" : "outline",
+                size: "sm",
+                onClick: () => setChartType("tickets"),
+                children: "Tickets"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              VentryButton,
+              {
+                variant: chartType === "attendance" ? "primary" : "outline",
+                size: "sm",
+                onClick: () => setChartType("attendance"),
+                children: "Attendance"
+              }
+            )
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(VentryCard, { className: "max-w-2xl mx-auto text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-6", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-2xl", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiHeart, { className: "h-6 w-6 text-red-500" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-bold text-gray-900 dark:text-white", children: "Built with love" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiStar, { className: "h-6 w-6 text-ventry-lime" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "This design system showcases modern web development practices with beautiful, accessible components that are ready for production use." }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "primary", children: "Get Started" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(VentryButton, { variant: "outline", children: "View Docs" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-64 bg-gradient-to-br from-ventry-blue/5 to-ventry-lime/5 rounded-ventry flex items-center justify-center border-2 border-dashed border-ventry-blue/20", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiChartBar, { className: "h-12 w-12 text-ventry-blue mx-auto mb-2" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-gray-600 dark:text-gray-400", children: [
+            chartType.charAt(0).toUpperCase() + chartType.slice(1),
+            " chart will be displayed here"
           ] })
         ] }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-6", children: "Top Performing Events" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-4", children: topEvents.map((event, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "div",
+          {
+            className: "flex items-center justify-between p-4 border border-gray-200 dark:border-gray-700 rounded-ventry hover:shadow-ventry transition-shadow",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-medium text-gray-900 dark:text-white mb-1", children: event.name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-3 gap-2 text-sm text-gray-600 dark:text-gray-400", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                    "Revenue: ",
+                    event.revenue
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                    "Tickets: ",
+                    event.tickets
+                  ] }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+                    "Attendance: ",
+                    event.attendance
+                  ] })
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-right", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-yellow-500", children: "★" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-gray-900 dark:text-white", children: event.rating })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+                  Math.round(event.attendance / event.tickets * 100),
+                  "% attended"
+                ] })
+              ] })
+            ]
+          },
+          index
+        )) })
       ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(VentryCard, { className: "p-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xl font-semibold text-gray-900 dark:text-white mb-6", children: "Audience Insights" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6", children: audienceInsights.map((insight, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative w-20 h-20 mx-auto mb-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "svg",
+            {
+              className: "w-20 h-20 transform -rotate-90",
+              viewBox: "0 0 100 100",
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "circle",
+                  {
+                    cx: "50",
+                    cy: "50",
+                    r: "40",
+                    stroke: "currentColor",
+                    strokeWidth: "8",
+                    fill: "transparent",
+                    className: "text-gray-300 dark:text-gray-600"
+                  }
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "circle",
+                  {
+                    cx: "50",
+                    cy: "50",
+                    r: "40",
+                    stroke: "currentColor",
+                    strokeWidth: "8",
+                    fill: "transparent",
+                    strokeDasharray: `${insight.percentage * 2.51} 251`,
+                    className: "text-ventry-blue"
+                  }
+                )
+              ]
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "absolute inset-0 flex items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-lg font-bold text-gray-900 dark:text-white", children: [
+            insight.percentage,
+            "%"
+          ] }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "font-medium text-gray-900 dark:text-white mb-1", children: insight.segment }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-gray-600 dark:text-gray-400", children: [
+          insight.count,
+          " people"
+        ] })
+      ] }, index)) })
+    ] })
+  ] });
+}
+
+function App() {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-h-screen bg-gray-50 dark:bg-gray-900", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(OrganizerSidebar, {}),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col flex-1 min-h-screen ml-64", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Navbar, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("main", { className: "flex-1 px-6 py-8", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Routes, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/", element: /* @__PURE__ */ jsxRuntimeExports.jsx(Navigate, { to: "/dashboard", replace: true }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/dashboard", element: /* @__PURE__ */ jsxRuntimeExports.jsx(Dashboard, {}) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/events", element: /* @__PURE__ */ jsxRuntimeExports.jsx(AllEvents, {}) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/events/create", element: /* @__PURE__ */ jsxRuntimeExports.jsx(CreateEvent, {}) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/venues", element: /* @__PURE__ */ jsxRuntimeExports.jsx(VenueManagement, {}) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Route, { path: "/analytics", element: /* @__PURE__ */ jsxRuntimeExports.jsx(Analytics, {}) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Route,
+          {
+            path: "*",
+            element: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex items-center justify-center h-64", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-2xl font-bold text-gray-900 dark:text-white mb-2", children: "Coming Soon" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-gray-600 dark:text-gray-400", children: "This page is under development" })
+            ] }) })
+          }
+        )
+      ] }) })
     ] })
   ] });
 }
